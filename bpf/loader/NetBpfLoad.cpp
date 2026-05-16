@@ -773,7 +773,7 @@ static int createMaps(const ElfObject& elfObj, const span<const struct bpf_map_d
     span<const char> btfData;
     struct btf *btf = NULL;
     auto btfGuard = base::make_scope_guard([&btf] { if (btf) btf__free(btf); });
-    if (isAtLeastKernelVersion(4, 19)) {
+    if (isAtLeastKernelVersion(5, 15)) {
         // On Linux Kernels older than 4.18 BPF_BTF_LOAD command doesn't exist.
         ret = elfObj.readSectionByName(".BTF", btfData);
         if (ret) {
@@ -1275,7 +1275,7 @@ static int loadProgByLibbpf(const char* const elfPath) {
     ret = bpf_object__load(obj);
     if (ret) return ret;
     // On Linux Kernels older than 4.18 BPF_BTF_LOAD command doesn't exist.
-    if (isAtLeastKernelVersion(4, 19) && bpf_object__btf_fd(obj) < 0) return -1;
+    if (isAtLeastKernelVersion(5, 15) && bpf_object__btf_fd(obj) < 0) return -1;
 
     ret = pinMaps(obj, md);
     if (ret) return ret;
