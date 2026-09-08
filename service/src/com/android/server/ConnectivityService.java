@@ -260,7 +260,6 @@ import android.net.NetworkInfo;
 import android.net.NetworkInfo.DetailedState;
 import android.net.NetworkMonitorManager;
 import android.net.NetworkPolicyManager;
-import android.net.NetworkPolicyManager.AllowedTransportsCallback;
 import android.net.NetworkPolicyManager.NetworkPolicyCallback;
 import android.net.NetworkProvider;
 import android.net.NetworkRequest;
@@ -788,9 +787,16 @@ public class ConnectivityService extends IConnectivityManager.Stub
             replaceFirewallChain(ConnectivityManager.FIREWALL_CHAIN_OEM_DENY_1,
                     newDenylist.stream().mapToInt(Integer::intValue).toArray());
         }
+        // [A37] DICABUT bersama registerAllowedTransportsCallback: celah hulu yang
+        // sama. NetworkPolicyManager di frameworks/base lineage-24.0 tidak
+        // menyediakan notifyDenylistChanged (diperiksa langsung di hulu).
+        // Akibatnya ikon firewall di UI tidak memantulkan perubahan denylist;
+        // pemblokirannya sendiri tetap diterapkan lewat replaceFirewallChain
+        // di atas. KEMBALIKAN begitu frameworks/base menyediakannya.
+        //
         // Tell NPMS about the changes, primarily so the firewall icon can reflect them.
-        mPolicyManager.notifyDenylistChanged(toAdd.stream().mapToInt(Integer::intValue).toArray(),
-                toRemove.stream().mapToInt(Integer::intValue).toArray());
+        // mPolicyManager.notifyDenylistChanged(toAdd.stream().mapToInt(Integer::intValue).toArray(),
+        //         toRemove.stream().mapToInt(Integer::intValue).toArray());
         if (DDBG) Log.d(TAG, ourTag + "end");
     }
 
@@ -2739,7 +2745,13 @@ public class ConnectivityService extends IConnectivityManager.Stub
         if (!shouldTrackUidsForBlockedStatusCallbacks()) {
             mPolicyManager.registerNetworkPolicyCallback(null, mPolicyCallback);
         }
-        mPolicyManager.registerAllowedTransportsCallback(null, mAllowedTransportsCallback);
+        // [A37] DICABUT: LineageOS 24.0 tidak konsisten dengan dirinya sendiri --
+        // Connectivity merujuk NetworkPolicyManager.AllowedTransportsCallback dan
+        // registerAllowedTransportsCallback(), tapi frameworks/base lineage-24.0
+        // tidak menyediakan keduanya (diperiksa di hulu: nol kecocokan). Keduanya
+        // sudah di HEAD hulu masing-masing, jadi ini celah hulu, bukan pohon usang.
+        // KEMBALIKAN begitu frameworks/base menyediakannya.
+        // mPolicyManager.registerAllowedTransportsCallback(null, mAllowedTransportsCallback);
 
         final PowerManager powerManager = (PowerManager) context.getSystemService(
                 Context.POWER_SERVICE);
@@ -4267,13 +4279,11 @@ public class ConnectivityService extends IConnectivityManager.Stub
         }
     };
 
-    private final AllowedTransportsCallback mAllowedTransportsCallback =
-            new AllowedTransportsCallback() {
-        @Override
-        public void onUidsAllowedTransportsChanged(int[] uids, long[] allowedTransports) {
-            setUidsAllowedTransports(uids, allowedTransports);
-        }
-    };
+    // [A37] Definisi mAllowedTransportsCallback DICABUT bersama pendaftarannya;
+    // lihat catatan di registerAllowedTransportsCallback. Akibatnya
+    // setUidsAllowedTransports() tidak pernah dipanggil, yaitu kebijakan
+    // transport-per-uid tidak diterapkan. Pada perangkat tanpa eBPF mesin
+    // kebijakan itu memang tidak berfungsi sejak awal.
 
     private boolean shouldTrackUidsForBlockedStatusCallbacks() {
         return mDeps.isAtLeastV();
