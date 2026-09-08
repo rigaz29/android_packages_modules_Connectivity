@@ -1103,7 +1103,14 @@ static int loadCodeSections(const ElfObject& elfObj, vector<codeSection>& cs,
                           cs[i].prog_def->name());
                     continue;
                 }
-                ALOGE("non-optional program %s failed to load.", cs[i].prog_def->name());
+                // [GSI] treat non-optional failures as non-fatal: kernels
+                // that spoof their version may pass the kver gate but lack
+                // the BPF features needed by the program (e.g. 4.19 spoofing
+                // 5.4 fails TC classifier programs).  warn and continue so
+                // tethering can fall back to iptables.
+                ALOGW("[GSI] non-optional program %s failed to load -- continuing anyway",
+                      cs[i].prog_def->name());
+                continue;
             }
         }
 
@@ -1549,65 +1556,55 @@ static int doLoad(char** argv, char * const envp[]) {
     // both S and T require kernel 4.9 (and eBpf support)
     // (this also guarantees 'kernelVer' isn't an invalid uninitialized 0)
     if (!isAtLeastKernelVersion(4, 9)) {
-        ALOGE("Android S & T require kernel 4.9.");
-        return 3;
+        ALOGW("[A37] Android S & T require kernel 4.9.");
     }
 
     // U bumps the kernel requirement up to 4.14
     if (isAtLeastU && !isAtLeastKernelVersion(4, 14)) {
-        ALOGE("Android U requires kernel 4.14.");
-        return 4;
+        ALOGW("[A37] Android U requires kernel 4.14.");
     }
 
     // V bumps the kernel requirement up to 4.19
     // see also: //system/netd/tests/kernel_test.cpp TestKernel419
     if (isAtLeastV && !isAtLeastKernelVersion(4, 19)) {
-        ALOGE("Android V requires kernel 4.19.");
-        return 5;
+        ALOGW("[A37] Android V requires kernel 4.19.");
     }
 
     // 25Q2 bumps the kernel requirement up to 5.4
     // see also: //system/netd/tests/kernel_test.cpp TestKernel54
     if (isAtLeast25Q2 && !isAtLeastKernelVersion(5, 4)) {
-        ALOGE("Android 25Q2 requires kernel 5.4.");
-        return 6;
+        ALOGW("[A37] Android 25Q2 requires kernel 5.4.");
     }
 
     // 25Q4 bumps the kernel requirement up to 5.10
     // see also: //system/netd/tests/kernel_test.cpp TestKernel510
     if (isAtLeast25Q4 && !isAtLeastKernelVersion(5, 10)) {
-        ALOGE("Android 25Q4 requires kernel 5.10.");
-        return 7;
+        ALOGW("[A37] Android 25Q4 requires kernel 5.10.");
     }
 
     // 26Q4 bumps the kernel requirement up to 5.15
     if (isAtLeast26Q4 && !isAtLeastKernelVersion(5, 15)) {
-        ALOGE("Android 26Q4 requires kernel 5.15.");
-        return 7;
+        ALOGW("[A37] Android 26Q4 requires kernel 5.15.");
     }
 
     // Technically already required by U, but only enforce on V+
     // see also: //system/netd/tests/kernel_test.cpp TestKernel64Bit
     if (isAtLeastV && isKernel32Bit() && isAtLeastKernelVersion(5, 16)) {
-        ALOGE("Android V+ platform with 32 bit kernel version >= 5.16.0 is unsupported");
-        if (!isTV()) return 8;
+        ALOGW("[A37] Android V+ platform with 32 bit kernel version >= 5.16.0 is unsupported");
     }
 
     if (isKernel32Bit() && isAtLeast25Q2) {
-        ALOGE("Android 25Q2 requires 64 bit kernel.");
-        return 9;
+        ALOGW("[A37] Android 25Q2 requires 64 bit kernel.");
     }
 
     // 6.6 is highest version supported by Android V, so this is effectively W+ (sdk=36+)
     if (isKernel32Bit() && isAtLeastKernelVersion(6, 7)) {
-        ALOGE("Android platform with 32 bit kernel version >= 6.7.0 is unsupported");
-        return 10;
+        ALOGW("[A37] Android platform with 32 bit kernel version >= 6.7.0 is unsupported");
     }
 
     // Various known ABI layout issues, particularly wrt. bpf and ipsec/xfrm.
     if (isAtLeastV && isKernel32Bit() && isX86()) {
-        ALOGE("Android V requires X86 kernel to be 64-bit.");
-        if (!isTV()) return 11;
+        ALOGW("[A37] Android V requires X86 kernel to be 64-bit.");
     }
 
     if (isAtLeastV) {
@@ -1738,8 +1735,10 @@ static int doLoad(char** argv, char * const envp[]) {
         // but we need 0 (enabled)
         // (this writeFile is known to fail on at least 4.19, but always defaults to 0 on
         // pre-5.13, on 5.13+ it depends on CONFIG_BPF_UNPRIV_DEFAULT_OFF)
-        if (!writeFile("/proc/sys/kernel/unprivileged_bpf_disabled", "0\n") &&
-            isAtLeastKernelVersion(5, 13)) return 23;
+        // [A37] kernel tanpa eBPF tidak punya berkas proc ini sama sekali;
+        // kegagalan menulisnya bukan alasan menolak boot.
+        if (!writeFile("/proc/sys/kernel/unprivileged_bpf_disabled", "0\n"))
+            ALOGW("[A37] gagal menulis unprivileged_bpf_disabled");
     }
 
     if (isAtLeastU) {
@@ -1754,29 +1753,37 @@ static int doLoad(char** argv, char * const envp[]) {
         //  kernel does not have CONFIG_BPF_JIT=y)
         // BPF_JIT is required by R VINTF (which means 4.14/4.19/5.4 kernels),
         // but 4.14/4.19 were released with P & Q, and only 5.4 is new in R+.
-        if (!writeFile("/proc/sys/net/core/bpf_jit_enable", "1\n")) return 24;
+        // [A37] kernel tanpa eBPF tidak punya berkas ini; bukan alasan menolak boot.
+        if (!writeFile("/proc/sys/net/core/bpf_jit_enable", "1\n"))
+            ALOGW("[A37] gagal menulis bpf_jit_enable");
 
         // Enable JIT kallsyms export for privileged users only
         // (Note: this (open) will fail with ENOENT 'No such file or directory' if
         //  kernel does not have CONFIG_HAVE_EBPF_JIT=y)
-        if (!writeFile("/proc/sys/net/core/bpf_jit_kallsyms", "1\n")) return 25;
+        // [A37] kernel tanpa eBPF tidak punya berkas ini; bukan alasan menolak boot.
+        if (!writeFile("/proc/sys/net/core/bpf_jit_kallsyms", "1\n"))
+            ALOGW("[A37] gagal menulis bpf_jit_kallsyms");
     }
 
     // Create all the pin subdirectories
     // (this must be done first to allow create_location and pin_subdir functionality,
     //  which could otherwise fail with ENOENT during object pinning or renaming,
     //  due to ordering issues)
-    if (!createDir("/sys/fs/bpf/tethering")) return 26;
+    // [A37] Kernel 3.10 tidak punya filesystem bpf, sehingga /sys/fs/bpf tidak
+    // pernah ter-mount dan createDir selalu gagal. Menolak boot karena itu tidak
+    // masuk akal: seluruh jalur BPF di bawah memang akan gagal, dan rantai patch
+    // BPF-less sudah membuat kegagalannya tidak fatal.
+    if (!createDir("/sys/fs/bpf/tethering")) ALOGW("[A37] createDir /sys/fs/bpf/tethering gagal");
     // This is technically T+ but S also needs it for the 'mainline_done' file.
-    if (!createDir("/sys/fs/bpf/netd_shared")) return 27;
+    if (!createDir("/sys/fs/bpf/netd_shared")) ALOGW("[A37] createDir /sys/fs/bpf/netd_shared gagal");
 
     if (isAtLeastT) {
-        if (!createDir("/sys/fs/bpf/netd_readonly")) return 28;
-        if (!createDir("/sys/fs/bpf/net_shared")) return 29;
-        if (!createDir("/sys/fs/bpf/net_private")) return 30;
+        if (!createDir("/sys/fs/bpf/netd_readonly")) ALOGW("[A37] createDir /sys/fs/bpf/netd_readonly gagal");
+        if (!createDir("/sys/fs/bpf/net_shared")) ALOGW("[A37] createDir /sys/fs/bpf/net_shared gagal");
+        if (!createDir("/sys/fs/bpf/net_private")) ALOGW("[A37] createDir /sys/fs/bpf/net_private gagal");
 
         // This one is primarily meant for triggering genfscon rules.
-        if (!createDir("/sys/fs/bpf/loader")) return 31;
+        if (!createDir("/sys/fs/bpf/loader")) ALOGW("[A37] createDir /sys/fs/bpf/loader gagal");
     }
 
     if (runningAsRoot) {  // implies U QPR3+ and kernel 4.14+
@@ -1784,14 +1791,12 @@ static int doLoad(char** argv, char * const envp[]) {
         errno = 0;
         uint32_t progId = bpfGetNextProgId(0);  // expect 0 with errno == ENOENT
         if (progId || errno != ENOENT) {
-            ALOGE("bpfGetNextProgId(zero) returned %u (errno %d)", progId, errno);
-            return 32;
+            ALOGW("[A37] bpfGetNextProgId(zero) returned %u (errno %d) -- kernel tanpa eBPF memberi ENOSYS, bukan ENOENT", progId, errno);
         }
         errno = 0;
         uint32_t mapId = bpfGetNextMapId(0);  // expect 0 with errno == ENOENT
         if (mapId || errno != ENOENT) {
-            ALOGE("bpfGetNextMapId(zero) returned %u (errno %d)", mapId, errno);
-            return 33;
+            ALOGW("[A37] bpfGetNextMapId(zero) returned %u (errno %d) -- kernel tanpa eBPF memberi ENOSYS, bukan ENOENT", mapId, errno);
         }
     } else if (isAtLeastKernelVersion(4, 14)) {  // implies S through U QPR2
         // bpfGetNext{Prog,Map}Id require 4.14+
@@ -1803,8 +1808,8 @@ static int doLoad(char** argv, char * const envp[]) {
             uint32_t next = bpfGetNextMapId(mapId);
             if (!next && errno == ENOENT) break;
             if (next <= mapId) {
-                ALOGE("bpfGetNextMapId(%u) returned %u errno %d", mapId, next, errno);
-                return 34;
+                ALOGW("[A37] bpfGetNextMapId(%u) returned %u errno %d", mapId, next, errno);
+                break;
             }
             mapId = next;
         }
@@ -1817,12 +1822,12 @@ static int doLoad(char** argv, char * const envp[]) {
             // which causes bpfGetNextMapId to behave as bpfGetNextProgId,
             // and thus it should return 0 with errno == ENOENT.
             ALOGE("bpfGetNextMapId(final %u) returned %u errno %d", mapId, next, errno);
-            if (next || errno != ENOENT) return 35;
-            if (isAtLeastT || isAtLeastKernelVersion(4, 20)) return 36;
+            // [A37] kernel tanpa eBPF: enumerasi map memang tidak berfungsi.
+            ALOGW("[A37] enumerasi map BPF tidak berfungsi -- diharapkan tanpa eBPF");
             // implies Android S with 4.14 or 4.19 kernel
             ALOGW("Detected kernel with invalid BPF UAPI - disabling mainline use of eBPF.");
             // leave a flag that we're 'done'
-            if (!createDir("/sys/fs/bpf/netd_shared/mainline_done")) return 37;
+            if (!createDir("/sys/fs/bpf/netd_shared/mainline_done")) ALOGW("[A37] createDir /sys/fs/bpf/netd_shared/mainline_done gagal");
             return 0;
         }
     } else {  // implies S/T with 4.9 kernel
@@ -1832,13 +1837,11 @@ static int doLoad(char** argv, char * const envp[]) {
     auto start = steady_clock::now();
     // Load all ELF objects, create programs and maps, and pin them
     if (!loadAllObjects()) {
-        ALOGE("=== CRITICAL FAILURE LOADING BPF PROGRAMS ===");
-        ALOGE("If this triggers reliably, you're probably missing kernel options or patches.");
-        ALOGE("If this triggers randomly, you might be hitting some memory allocation "
-              "problems or startup script race.");
-        ALOGE("--- DO NOT EXPECT SYSTEM TO BOOT SUCCESSFULLY ---");
-        sleep(20);
-        return 38;
+        // [A37] Pada kernel 3.10 tanpa eBPF ini SELALU gagal, dan itu memang
+        // diharapkan. Membiarkannya fatal berarti init memuat ulang bpfloader
+        // tanpa henti (reboot_on_failure) dan perangkat tidak pernah boot.
+        // sleep(20) juga dibuang: ia hanya memperlambat boot tanpa guna.
+        ALOGW("[A37] gagal memuat program BPF -- diharapkan pada kernel tanpa eBPF");
     }
 
     auto end = steady_clock::now();
@@ -1847,9 +1850,8 @@ static int doLoad(char** argv, char * const envp[]) {
     {
         uint32_t key = BPF_KERNEL_STATS_MAP_KEY_TOTAL_OBJS_LOAD_TIME_MS;
         if (writeToMapEntry(bpfKernelStatsMapFd, &key, &timeTaken, BPF_ANY)) {
-            ALOGE("Failed to write object load time to kernel stats map, err: [%d, %s]",
+            ALOGW("[A37] gagal menulis waktu muat ke kernel stats map: [%d, %s]",
                   errno, strerror(errno));
-            return 39;
         }
 
         uint32_t value = 123;
@@ -1857,12 +1859,12 @@ static int doLoad(char** argv, char * const envp[]) {
         if (writeToMapEntry(bpfKernelStatsMapFd, &key, &value, BPF_ANY)) {
             ALOGE("Critical kernel bug - failure to write into index 1 of 2 element bpf map array."
                   "[%d, %s]", errno, strerror(errno));
-            if (isAtLeastT) return 40;
+            // [A37] tanpa eBPF map ini tidak ada; bukan alasan menolak boot.
         }
     }
 
     // leave a flag that we're done
-    if (!createDir("/sys/fs/bpf/netd_shared/mainline_done")) return 41;
+    if (!createDir("/sys/fs/bpf/netd_shared/mainline_done")) ALOGW("[A37] createDir /sys/fs/bpf/netd_shared/mainline_done gagal");
 
     // platform bpfloader will only succeed when run as root
     if (!runningAsRoot) {

@@ -455,8 +455,11 @@ public class BpfNetMaps {
         try {
             return SingleWriterBpfMap.getSingleton(
                     CONFIGURATION_MAP_PATH, S32.class, U32.class);
-        } catch (ErrnoException e) {
-            throw new IllegalStateException("Cannot open netd configuration map", e);
+        } catch (Throwable e) {
+            // [A37] Tanpa eBPF map ini tidak pernah ada. Melempar di sini
+            // menjatuhkan system_server saat ConnectivityService init.
+            android.util.Log.w(TAG, "Cannot open netd configuration map", e);
+            return null;
         }
     }
 
@@ -465,8 +468,11 @@ public class BpfNetMaps {
         try {
             return SingleWriterBpfMap.getSingleton(
                     UID_OWNER_MAP_PATH, S32.class, UidOwnerValue.class);
-        } catch (ErrnoException e) {
-            throw new IllegalStateException("Cannot open uid owner map", e);
+        } catch (Throwable e) {
+            // [A37] Tanpa eBPF map ini tidak pernah ada. Melempar di sini
+            // menjatuhkan system_server saat ConnectivityService init.
+            android.util.Log.w(TAG, "Cannot open uid owner map", e);
+            return null;
         }
     }
 
@@ -475,8 +481,11 @@ public class BpfNetMaps {
         try {
             return SingleWriterBpfMap.getSingleton(
                     UID_PERMISSION_MAP_PATH, S32.class, U8.class);
-        } catch (ErrnoException e) {
-            throw new IllegalStateException("Cannot open uid permission map", e);
+        } catch (Throwable e) {
+            // [A37] Tanpa eBPF map ini tidak pernah ada. Melempar di sini
+            // menjatuhkan system_server saat ConnectivityService init.
+            android.util.Log.w(TAG, "Cannot open uid permission map", e);
+            return null;
         }
     }
 
@@ -485,8 +494,11 @@ public class BpfNetMaps {
         try {
             return SingleWriterBpfMap.getSingleton(
                     UID_PERMISSION_CHUNK_MAP_PATH, S32.class, UidPermissionChunk.class);
-        } catch (ErrnoException e) {
-            throw new IllegalStateException("Cannot open uid permission chunk map", e);
+        } catch (Throwable e) {
+            // [A37] Tanpa eBPF map ini tidak pernah ada. Melempar di sini
+            // menjatuhkan system_server saat ConnectivityService init.
+            android.util.Log.w(TAG, "Cannot open uid permission chunk map", e);
+            return null;
         }
     }
 
@@ -496,8 +508,11 @@ public class BpfNetMaps {
             // Cannot use SingleWriterBpfMap because it's written by ClatCoordinator as well.
             return new BpfMap<>(COOKIE_TAG_MAP_PATH,
                     S64.class, CookieTagMapValue.class);
-        } catch (ErrnoException e) {
-            throw new IllegalStateException("Cannot open cookie tag map", e);
+        } catch (Throwable e) {
+            // [A37] Tanpa eBPF map ini tidak pernah ada. Melempar di sini
+            // menjatuhkan system_server saat ConnectivityService init.
+            android.util.Log.w(TAG, "Cannot open cookie tag map", e);
+            return null;
         }
     }
 
@@ -506,8 +521,11 @@ public class BpfNetMaps {
         try {
             return SingleWriterBpfMap.getSingleton(
                     DATA_SAVER_ENABLED_MAP_PATH, S32.class, U8.class);
-        } catch (ErrnoException e) {
-            throw new IllegalStateException("Cannot open data saver enabled map", e);
+        } catch (Throwable e) {
+            // [A37] Tanpa eBPF map ini tidak pernah ada. Melempar di sini
+            // menjatuhkan system_server saat ConnectivityService init.
+            android.util.Log.w(TAG, "Cannot open data saver enabled map", e);
+            return null;
         }
     }
 
@@ -516,8 +534,11 @@ public class BpfNetMaps {
         try {
             return SingleWriterBpfMap.getSingleton(INGRESS_DISCARD_MAP_PATH,
                     IngressDiscardKey.class, IngressDiscardValue.class);
-        } catch (ErrnoException e) {
-            throw new IllegalStateException("Cannot open ingress discard map", e);
+        } catch (Throwable e) {
+            // [A37] Tanpa eBPF map ini tidak pernah ada. Melempar di sini
+            // menjatuhkan system_server saat ConnectivityService init.
+            android.util.Log.w(TAG, "Cannot open ingress discard map", e);
+            return null;
         }
     }
 
@@ -526,8 +547,11 @@ public class BpfNetMaps {
         try {
             return SingleWriterBpfMap.getSingleton(LOCAL_NET_BLOCKED_UID_MAP_PATH,
                     U32.class, Bool.class);
-        } catch (ErrnoException e) {
-            throw new IllegalStateException("Cannot open local_net_blocked_uid map", e);
+        } catch (Throwable e) {
+            // [A37] Tanpa eBPF map ini tidak pernah ada. Melempar di sini
+            // menjatuhkan system_server saat ConnectivityService init.
+            android.util.Log.w(TAG, "Cannot open local_net_blocked_uid map", e);
+            return null;
         }
     }
 
@@ -536,8 +560,11 @@ public class BpfNetMaps {
         try {
             return SingleWriterBpfMap.getSingleton(LOCAL_NET_UID_HOST_ALLOWLIST_MAP_PATH,
                     LocalNetUidHostAllowlistKey.class, Bool.class);
-        } catch (ErrnoException e) {
-            throw new IllegalStateException("Cannot open local_net_uid_host_access map", e);
+        } catch (Throwable e) {
+            // [A37] Tanpa eBPF map ini tidak pernah ada. Melempar di sini
+            // menjatuhkan system_server saat ConnectivityService init.
+            android.util.Log.w(TAG, "Cannot open local_net_uid_host_access map", e);
+            return null;
         }
     }
 
@@ -546,8 +573,11 @@ public class BpfNetMaps {
         try {
             return SingleWriterBpfMap.getSingleton(LOCAL_NET_CACHE_GENERATION_ID_MAP_PATH,
                     U32.class, S64.class);
-        } catch (ErrnoException e) {
-            throw new IllegalStateException("Cannot open local_net_cache_generation_id map", e);
+        } catch (Throwable e) {
+            // [A37] Tanpa eBPF map ini tidak pernah ada. Melempar di sini
+            // menjatuhkan system_server saat ConnectivityService init.
+            android.util.Log.w(TAG, "Cannot open local_net_cache_generation_id map", e);
+            return null;
         }
     }
 
@@ -555,8 +585,11 @@ public class BpfNetMaps {
     private static BpfBoolean getUidMigrationEnabledBpfBoolean() {
         try {
             return new BpfBoolean(UID_MIGRATION_ENABLED_MAP_PATH, true);
-        } catch (ErrnoException e) {
-            throw new IllegalStateException("Cannot open uid migration enabled map", e);
+        } catch (Throwable e) {
+            // [A37] Tanpa eBPF map ini tidak pernah ada. Melempar di sini
+            // menjatuhkan system_server saat ConnectivityService init.
+            android.util.Log.w(TAG, "Cannot open uid migration enabled map", e);
+            return null;
         }
     }
 
@@ -564,8 +597,11 @@ public class BpfNetMaps {
     private static BpfBoolean getLoopbackAccessMetricsEnabledBpfBoolean() {
         try {
             return new BpfBoolean(LOOPBACK_ACCESS_METRICS_ENABLED_MAP_PATH, true);
-        } catch (ErrnoException e) {
-            throw new IllegalStateException("Cannot open loopback access metrics enabled map", e);
+        } catch (Throwable e) {
+            // [A37] Tanpa eBPF map ini tidak pernah ada. Melempar di sini
+            // menjatuhkan system_server saat ConnectivityService init.
+            android.util.Log.w(TAG, "Cannot open loopback access metrics enabled map", e);
+            return null;
         }
     }
 
@@ -573,8 +609,11 @@ public class BpfNetMaps {
     private static BpfBoolean getLoopbackChecksEnabledBpfBoolean() {
         try {
             return new BpfBoolean(LOOPBACK_CHECKS_ENABLED_MAP_PATH, true);
-        } catch (ErrnoException e) {
-            throw new IllegalStateException("Cannot open loopback checks enabled map", e);
+        } catch (Throwable e) {
+            // [A37] Tanpa eBPF map ini tidak pernah ada. Melempar di sini
+            // menjatuhkan system_server saat ConnectivityService init.
+            android.util.Log.w(TAG, "Cannot open loopback checks enabled map", e);
+            return null;
         }
     }
 
@@ -583,8 +622,11 @@ public class BpfNetMaps {
         try {
             return new BpfBoolean(
                     PERMISSION_PROPAGATION_ENABLED_MAP_PATH, true);
-        } catch (ErrnoException e) {
-            throw new IllegalStateException("Cannot open permission propagation enabled map", e);
+        } catch (Throwable e) {
+            // [A37] Tanpa eBPF map ini tidak pernah ada. Melempar di sini
+            // menjatuhkan system_server saat ConnectivityService init.
+            android.util.Log.w(TAG, "Cannot open permission propagation enabled map", e);
+            return null;
         }
     }
 
@@ -592,8 +634,11 @@ public class BpfNetMaps {
     private static BpfBoolean getLocalNetNoteOpsEnabledBpfBoolean() {
         try {
             return new BpfBoolean(LOCAL_NET_NOTE_OP_ENABLED_MAP_PATH, true);
-        } catch (ErrnoException e) {
-            throw new IllegalStateException("Cannot open LNP note op enabled map", e);
+        } catch (Throwable e) {
+            // [A37] Tanpa eBPF map ini tidak pernah ada. Melempar di sini
+            // menjatuhkan system_server saat ConnectivityService init.
+            android.util.Log.w(TAG, "Cannot open LNP note op enabled map", e);
+            return null;
         }
     }
 
@@ -602,16 +647,22 @@ public class BpfNetMaps {
         try {
             return SingleWriterBpfMap.getSingleton(LOCAL_NET_ACCESS_MAP_PATH,
                     LocalNetAccessKey.class, Bool.class);
-        } catch (ErrnoException e) {
-            throw new IllegalStateException("Cannot open local_net_access map", e);
+        } catch (Throwable e) {
+            // [A37] Tanpa eBPF map ini tidak pernah ada. Melempar di sini
+            // menjatuhkan system_server saat ConnectivityService init.
+            android.util.Log.w(TAG, "Cannot open local_net_access map", e);
+            return null;
         }
     }
 
     private static BpfBoolean getL4sEnabledMap() {
         try {
             return new BpfBoolean(L4S_ENABLED_MAP_PATH, true /* exclusive */);
-        } catch (ErrnoException e) {
-            throw new IllegalStateException("Cannot open l4s_accecn_ map", e);
+        } catch (Throwable e) {
+            // [A37] Tanpa eBPF map ini tidak pernah ada. Melempar di sini
+            // menjatuhkan system_server saat ConnectivityService init.
+            android.util.Log.w(TAG, "Cannot open l4s_accecn_ map", e);
+            return null;
         }
     }
 
@@ -824,7 +875,20 @@ public class BpfNetMaps {
         sBetaMetricsEnabled = deps.isBetaMetricsEnabled();
         if (SdkLevel.isAtLeastT()) {
             sL4sSupported = deps.isL4sProgramLoaded();
-            initBpfMaps(deps);
+            // [A37] Pada kernel tanpa eBPF seluruh map bernilai null dan
+            // initBpfMaps pasti gagal -- NPE, ErrnoException, atau
+            // IllegalStateException. Membiarkannya menyebar menjatuhkan
+            // system_server saat ConnectivityService init, dan perangkat
+            // tidak pernah sampai homescreen.
+            //
+            // Dibungkus di SATU titik, bukan ditambal di tiap pemakaian di
+            // dalam initBpfMaps: yang penting sInitialized tetap tersetel
+            // supaya pemanggil berikutnya tidak mencoba lagi tanpa henti.
+            try {
+                initBpfMaps(deps);
+            } catch (Throwable e) {
+                android.util.Log.w(TAG, "initBpfMaps gagal -- diharapkan tanpa eBPF", e);
+            }
         }
         sInitialized = true;
     }

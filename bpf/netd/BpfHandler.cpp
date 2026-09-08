@@ -116,27 +116,27 @@ static Result<void> initPrograms(const char* cg2_path) {
 
     // S requires eBPF support which was only added in 4.9, so this should be satisfied.
     if (!isAtLeastKernelVersion(4, 9)) {
-        return Error() << "kernel version < 4.9.0 is unsupported";
+        ALOGW("[A37] kernel version < 4.9.0 is unsupported");
     }
 
     // U bumps the kernel requirement up to 4.14
     if (isAtLeastU && !isAtLeastKernelVersion(4, 14)) {
-        return Error() << "U+ platform with kernel version < 4.14.0 is unsupported";
+        ALOGW("[A37] U+ platform with kernel version < 4.14.0 is unsupported");
     }
 
     // U mandates this mount point (though it should also be the case on T)
     if (isAtLeastU && !!strcmp(cg2_path, "/sys/fs/cgroup")) {
-        return Error() << "U+ platform with cg2_path != /sys/fs/cgroup is unsupported";
+        ALOGW("[A37] U+ platform with cg2_path != /sys/fs/cgroup is unsupported");
     }
 
     // V bumps the kernel requirement up to 4.19
     if (isAtLeastV && !isAtLeastKernelVersion(4, 19)) {
-        return Error() << "V+ platform with kernel version < 4.19.0 is unsupported";
+        ALOGW("[A37] V+ platform with kernel version < 4.19.0 is unsupported");
     }
 
     // 25Q2 bumps the kernel requirement up to 5.4
     if (isAtLeast25Q2 && !isAtLeastKernelVersion(5, 4)) {
-        return Error() << "25Q2+ platform with kernel version < 5.4.0 is unsupported";
+        ALOGW("[A37] 25Q2+ platform with kernel version < 5.4.0 is unsupported");
     }
 
     unique_fd cg_fd(open(cg2_path, O_DIRECTORY | O_RDONLY | O_CLOEXEC));
@@ -146,8 +146,23 @@ static Result<void> initPrograms(const char* cg2_path) {
     RETURN_IF_NOT_OK(checkProgramAccessible(XT_BPF_DENYLIST_PROG_PATH));
     RETURN_IF_NOT_OK(checkProgramAccessible(XT_BPF_EGRESS_PROG_PATH));
     RETURN_IF_NOT_OK(checkProgramAccessible(XT_BPF_INGRESS_PROG_PATH));
-    RETURN_IF_NOT_OK(attachProgramToCgroup(BPF_EGRESS_PROG_PATH, cg_fd, BPF_CGROUP_INET_EGRESS));
-    RETURN_IF_NOT_OK(attachProgramToCgroup(BPF_INGRESS_PROG_PATH, cg_fd, BPF_CGROUP_INET_INGRESS));
+    // [A37] Semula RETURN_IF_NOT_OK: pada kernel tanpa eBPF gagal memasang
+    // program berarti init() gagal, netd mati, dan init menghidupkannya lagi
+    // tanpa henti. Diturunkan menjadi peringatan.
+    //
+    // Dua koreksi terhadap patch GSI aslinya:
+    //   - isOk(x) tidak ada di 24.0; attachProgramToCgroup mengembalikan
+    //     Result<void>, jadi yang benar x.ok()
+    //   - patch aslinya memeriksa `ret` DUA KALI, sehingga hasil ingress tidak
+    //     pernah diperiksa sama sekali
+    auto retEgress = attachProgramToCgroup(BPF_EGRESS_PROG_PATH, cg_fd, BPF_CGROUP_INET_EGRESS);
+    if (!retEgress.ok()) {
+        ALOGW("[A37] gagal memasang program egress: %s", retEgress.error().message().c_str());
+    }
+    auto retIngress = attachProgramToCgroup(BPF_INGRESS_PROG_PATH, cg_fd, BPF_CGROUP_INET_INGRESS);
+    if (!retIngress.ok()) {
+        ALOGW("[A37] gagal memasang program ingress: %s", retIngress.error().message().c_str());
+    }
 
     // For the devices that support cgroup socket filter, the socket filter
     // should be loaded successfully by bpfloader. So we attach the filter to
@@ -206,38 +221,55 @@ static Result<void> initPrograms(const char* cg2_path) {
 
         // This should trivially pass, since we just attached up above,
         // but BPF_PROG_QUERY is only implemented on 4.19+ kernels.
-        if (queryProgram(cg_fd, BPF_CGROUP_INET_EGRESS) <= 0) abort();
-        if (queryProgram(cg_fd, BPF_CGROUP_INET_INGRESS) <= 0) abort();
-        if (queryProgram(cg_fd, BPF_CGROUP_INET_SOCK_CREATE) <= 0) abort();
-        if (queryProgram(cg_fd, BPF_CGROUP_INET4_BIND) <= 0) abort();
-        if (queryProgram(cg_fd, BPF_CGROUP_INET6_BIND) <= 0) abort();
+        // [A37] abort() di sini mematikan netd pada kernel tanpa eBPF, dan init
+        // menghidupkannya lagi tanpa henti. Kegagalan query dijadikan peringatan.
+        if (queryProgram(cg_fd, BPF_CGROUP_INET_EGRESS) <= 0)
+            ALOGW("[A37] query BPF_CGROUP_INET_EGRESS gagal, lanjut tanpa BPF");
+        if (queryProgram(cg_fd, BPF_CGROUP_INET_INGRESS) <= 0)
+            ALOGW("[A37] query BPF_CGROUP_INET_INGRESS gagal, lanjut tanpa BPF");
+        if (queryProgram(cg_fd, BPF_CGROUP_INET_SOCK_CREATE) <= 0)
+            ALOGW("[A37] query BPF_CGROUP_INET_SOCK_CREATE gagal, lanjut tanpa BPF");
+        if (queryProgram(cg_fd, BPF_CGROUP_INET4_BIND) <= 0)
+            ALOGW("[A37] query BPF_CGROUP_INET4_BIND gagal, lanjut tanpa BPF");
+        if (queryProgram(cg_fd, BPF_CGROUP_INET6_BIND) <= 0)
+            ALOGW("[A37] query BPF_CGROUP_INET6_BIND gagal, lanjut tanpa BPF");
     }
 
     if (isAtLeastKernelVersion(5, 10)) {
-        if (queryProgram(cg_fd, BPF_CGROUP_INET_SOCK_RELEASE) <= 0) abort();
+        if (queryProgram(cg_fd, BPF_CGROUP_INET_SOCK_RELEASE) <= 0)
+            ALOGW("[A37] query BPF_CGROUP_INET_SOCK_RELEASE gagal, lanjut tanpa BPF");
     }
 
     if (isAtLeastV) {
         // V requires 4.19+, so technically this 2nd 'if' is not required, but it
         // doesn't hurt us to try to support AOSP forks that try to support older kernels.
         if (isAtLeastKernelVersion(4, 19)) {
-            if (queryProgram(cg_fd, BPF_CGROUP_INET4_CONNECT) <= 0) abort();
-            if (queryProgram(cg_fd, BPF_CGROUP_INET6_CONNECT) <= 0) abort();
-            if (queryProgram(cg_fd, BPF_CGROUP_UDP4_RECVMSG) <= 0) abort();
-            if (queryProgram(cg_fd, BPF_CGROUP_UDP6_RECVMSG) <= 0) abort();
-            if (queryProgram(cg_fd, BPF_CGROUP_UDP4_SENDMSG) <= 0) abort();
-            if (queryProgram(cg_fd, BPF_CGROUP_UDP6_SENDMSG) <= 0) abort();
+            if (queryProgram(cg_fd, BPF_CGROUP_INET4_CONNECT) <= 0)
+                ALOGW("[A37] query BPF_CGROUP_INET4_CONNECT gagal, lanjut tanpa BPF");
+            if (queryProgram(cg_fd, BPF_CGROUP_INET6_CONNECT) <= 0)
+                ALOGW("[A37] query BPF_CGROUP_INET6_CONNECT gagal, lanjut tanpa BPF");
+            if (queryProgram(cg_fd, BPF_CGROUP_UDP4_RECVMSG) <= 0)
+                ALOGW("[A37] query BPF_CGROUP_UDP4_RECVMSG gagal, lanjut tanpa BPF");
+            if (queryProgram(cg_fd, BPF_CGROUP_UDP6_RECVMSG) <= 0)
+                ALOGW("[A37] query BPF_CGROUP_UDP6_RECVMSG gagal, lanjut tanpa BPF");
+            if (queryProgram(cg_fd, BPF_CGROUP_UDP4_SENDMSG) <= 0)
+                ALOGW("[A37] query BPF_CGROUP_UDP4_SENDMSG gagal, lanjut tanpa BPF");
+            if (queryProgram(cg_fd, BPF_CGROUP_UDP6_SENDMSG) <= 0)
+                ALOGW("[A37] query BPF_CGROUP_UDP6_SENDMSG gagal, lanjut tanpa BPF");
         }
 
         if (isAtLeastKernelVersion(5, 4)) {
-            if (queryProgram(cg_fd, BPF_CGROUP_GETSOCKOPT) <= 0) abort();
-            if (queryProgram(cg_fd, BPF_CGROUP_SETSOCKOPT) <= 0) abort();
+            if (queryProgram(cg_fd, BPF_CGROUP_GETSOCKOPT) <= 0)
+                ALOGW("[A37] query BPF_CGROUP_GETSOCKOPT gagal, lanjut tanpa BPF");
+            if (queryProgram(cg_fd, BPF_CGROUP_SETSOCKOPT) <= 0)
+                ALOGW("[A37] query BPF_CGROUP_SETSOCKOPT gagal, lanjut tanpa BPF");
         }
     }
 
     if (isAtLeast26Q2) {
         if (isAtLeastKernelVersion(6, 1) && !isAtLeastKernelVersion(6, 18)) {
-            if (queryProgram(cg_fd, BPF_CGROUP_SOCK_OPS) <= 0) abort();
+            if (queryProgram(cg_fd, BPF_CGROUP_SOCK_OPS) <= 0)
+                ALOGW("[A37] query BPF_CGROUP_SOCK_OPS gagal, lanjut tanpa BPF");
         }
     }
 

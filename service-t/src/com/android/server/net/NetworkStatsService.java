@@ -3343,16 +3343,24 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
     private NetworkStats readNetworkStatsSummaryXt() {
         try {
             return mStatsFactory.readNetworkStatsSummaryXt();
-        } catch (IOException e) {
-            throw new IllegalStateException(e);
+        } catch (Throwable e) {
+            // [A37] Tanpa eBPF statistik jaringan memang tidak tersedia.
+            // Melempar di sini menjatuhkan system_server; kembalikan statistik
+            // kosong supaya pemanggilnya jalan terus tanpa angka.
+            android.util.Log.w(TAG, "Gagal membaca statistik jaringan", e);
+            return new NetworkStats(SystemClock.elapsedRealtime(), 0);
         }
     }
 
     private NetworkStats readNetworkStatsUidDetail(int uid, String[] ifaces, int tag) {
         try {
             return mStatsFactory.readNetworkStatsDetail(uid, ifaces, tag);
-        } catch (IOException e) {
-            throw new IllegalStateException(e);
+        } catch (Throwable e) {
+            // [A37] Tanpa eBPF statistik jaringan memang tidak tersedia.
+            // Melempar di sini menjatuhkan system_server; kembalikan statistik
+            // kosong supaya pemanggilnya jalan terus tanpa angka.
+            android.util.Log.w(TAG, "Gagal membaca statistik jaringan", e);
+            return new NetworkStats(SystemClock.elapsedRealtime(), 0);
         }
     }
 

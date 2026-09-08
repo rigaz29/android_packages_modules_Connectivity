@@ -48,7 +48,14 @@ using base::ResultError;
 using base::unique_fd;
 using std::function;
 
-[[noreturn]] __attribute__((__format__(__printf__, 2, 3))) static inline
+// [A37] `[[noreturn]]` DIBUANG bersama abort() di bawah. Keduanya harus
+// dibuang bersamaan: menghapus abort() tapi mempertahankan [[noreturn]]
+// membuat fungsi ini jatuh keluar dari jalur yang dijanjikan tidak pernah
+// kembali, yaitu undefined behavior.
+//
+// Pada kernel tanpa eBPF setiap akses map gagal, dan abort() di sini
+// mematikan proses pemanggilnya -- netd, system_server, atau siapa pun.
+__attribute__((__format__(__printf__, 2, 3))) static inline
 void Abort(int __unused error, const char* __unused fmt, ...) {
 #ifdef BPFMAP_VERBOSE_ABORT
     va_list va;
@@ -62,8 +69,6 @@ void Abort(int __unused error, const char* __unused fmt, ...) {
 
     va_end(va);
 #endif
-
-    abort();
 }
 
 // We care about enabling SSO on 64-bit platforms

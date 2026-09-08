@@ -31,8 +31,10 @@ int libnetd_updatable_init(const char* cg2_path) {
 
     android::base::Result<void> ret = sBpfHandler.init(cg2_path);
     if (!ret.ok()) {
+        // [A37] JANGAN abort(): pada kernel tanpa eBPF init() memang selalu
+        // gagal, dan abort() di sini membuat netd crash-loop tanpa henti.
         LOG(ERROR) << __func__ << ": Failed: " << ret.error().message();
-        abort();
+        return -1;
     }
     return 0;
 }

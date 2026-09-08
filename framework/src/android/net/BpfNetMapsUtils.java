@@ -217,9 +217,11 @@ public class BpfNetMapsUtils {
         try {
             final U32 config = configurationMap.getValue(UID_RULES_CONFIGURATION_KEY);
             return (config.val & match) != 0;
-        } catch (ErrnoException e) {
-            throw new ServiceSpecificException(e.errno,
-                    "Unable to get firewall chain status: " + Os.strerror(e.errno));
+        } catch (Throwable e) {
+            // [A37] Tanpa eBPF map ini tidak pernah ada. Melempar di sini
+            // menjatuhkan system_server; anggap saja chain tidak aktif.
+            android.util.Log.w("BpfNetMapsUtils", "Unable to get firewall chain status", e);
+            return false;
         }
     }
 
@@ -244,9 +246,11 @@ public class BpfNetMapsUtils {
             final UidOwnerValue uidMatch = uidOwnerMap.getValue(new S32(uid));
             final boolean isMatchEnabled = uidMatch != null && (uidMatch.rule & match) != 0;
             return isMatchEnabled == isAllowList ? FIREWALL_RULE_ALLOW : FIREWALL_RULE_DENY;
-        } catch (ErrnoException e) {
-            throw new ServiceSpecificException(e.errno,
-                    "Unable to get uid rule status: " + Os.strerror(e.errno));
+        } catch (Throwable e) {
+            // [A37] Tanpa eBPF aturan per-uid tidak pernah ada. Default ALLOW:
+            // firewall memang tidak berfungsi, jadi jangan blokir apa pun.
+            android.util.Log.w("BpfNetMapsUtils", "Unable to get uid rule, default ALLOW", e);
+            return FIREWALL_RULE_ALLOW;
         }
     }
 
@@ -267,15 +271,17 @@ public class BpfNetMapsUtils {
             return BLOCKED_REASON_NONE;
         }
 
-        final long uidRuleConfig;
-        final long uidMatch;
+        // [A37] Nilai awal 0 supaya kegagalan membaca map tidak menjatuhkan
+        // system_server. 0 berarti "tidak ada aturan pemblokiran", yang benar
+        // untuk perangkat tanpa eBPF: firewall memang tidak berfungsi.
+        long uidRuleConfig = 0;
+        long uidMatch = 0;
         try {
             uidRuleConfig = configurationMap.getValue(UID_RULES_CONFIGURATION_KEY).val;
             final UidOwnerValue value = uidOwnerMap.getValue(new Struct.S32(uid));
             uidMatch = (value != null) ? value.rule : 0L;
-        } catch (ErrnoException e) {
-            throw new ServiceSpecificException(e.errno,
-                    "Unable to get firewall chain status: " + Os.strerror(e.errno));
+        } catch (Throwable e) {
+            android.util.Log.w("BpfNetMapsUtils", "Unable to get firewall chain status", e);
         }
         final long blockingMatches = (uidRuleConfig & ~uidMatch & sMaskDropIfUnset)
                 | (uidRuleConfig & uidMatch & sMaskDropIfSet);
@@ -367,9 +373,10 @@ public class BpfNetMapsUtils {
 
         try {
             return dataSaverEnabledMap.getValue(DATA_SAVER_ENABLED_KEY).val == DATA_SAVER_ENABLED;
-        } catch (ErrnoException e) {
-            throw new ServiceSpecificException(e.errno, "Unable to get data saver: "
-                    + Os.strerror(e.errno));
+        } catch (Throwable e) {
+            // [A37] Tanpa eBPF status data saver tidak terbaca; anggap mati.
+            android.util.Log.w("BpfNetMapsUtils", "Unable to get data saver, assume off", e);
+            return false;
         }
     }
 }

@@ -2066,12 +2066,12 @@ public class Tethering {
             final String[] dhcpRanges = cfg.useLegacyDhcpServer()
                     ? cfg.legacyDhcpRanges : new String[0];
             try {
-                NetdUtils.tetherStart(mNetd, true /** usingLegacyDnsProxy */, dhcpRanges);
+                NetdUtils.tetherStart(mNetd, false /** usingLegacyDnsProxy */, dhcpRanges);
             } catch (RemoteException | ServiceSpecificException e) {
                 try {
                     // Stop and retry.
                     mNetd.tetherStop();
-                    NetdUtils.tetherStart(mNetd, true /** usingLegacyDnsProxy */, dhcpRanges);
+                    NetdUtils.tetherStart(mNetd, false /** usingLegacyDnsProxy */, dhcpRanges);
                 } catch (RemoteException | ServiceSpecificException ee) {
                     mLog.e(ee);
                     transitionTo(mStartTetheringErrorState);
