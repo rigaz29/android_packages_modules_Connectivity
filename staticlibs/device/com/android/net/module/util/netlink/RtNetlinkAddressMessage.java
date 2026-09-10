@@ -130,14 +130,44 @@ public class RtNetlinkAddressMessage extends NetlinkMessage {
 
         // The first 8 bits of flags are in the ifaddrmsg.
         addrMsg.mFlags = addrMsg.mIfaddrmsg.flags;
-        // IFA_FLAGS. All the flags are in the IF_FLAGS attribute. This should always be present,
-        // and will overwrite the flags set above.
+        // IFA_FLAGS. All the flags are in the IF_FLAGS attribute, and will overwrite the flags set
+        // above -- TAPI HANYA KALAU ATRIBUTNYA ADA.
+        //
+        // A37: IFA_FLAGS (8) baru diperkenalkan Linux 3.14. Kernel 3.10 perangkat ini tidak
+        // mengenalnya sama sekali -- enum di include/uapi/linux/if_addr.h berakhir di
+        // IFA_CACHEINFO (6) dan IFA_MULTICAST (7). Kernel tidak pernah mengirimnya, sehingga
+        // `return null` di sini menolak SETIAP RTM_NEWADDR.
+        //
+        // Akibatnya berantai, dan ujungnya sama sekali tidak terlihat seperti masalah netlink:
+        //   NetlinkMonitor mencatat "unparsable netlink msg"
+        //     -> IpClientLinkObserver tidak pernah tahu alamatnya terpasang
+        //     -> IpClient tidak pernah melaporkan provisioning, sukses maupun gagal
+        //     -> agen Wi-Fi tidak pernah CONNECTED
+        //     -> DNS kosong, dan koneksi tidak pernah bisa dipakai
+        // Di layar hanya tampak "obtaining IP address", padahal DHCP sudah lama berhasil.
+        //
+        // CATATAN 23.2: ekor rantainya BERBEDA dari yang tercatat di 22.2. Di sana
+        // networkCreate tidak pernah dipanggil sehingga networkAddRouteParcel ditolak
+        // "no such netId" (ENONET). Di 23.2 rutenya justru BERHASIL --
+        //   networkAddRouteParcel(105, 192.168.0.0/24, isLocalRoute: true)  <0.60ms>
+        //   networkAddRouteParcel(105, 0.0.0.0/0, nextHop: 192.168.0.1)     <0.31ms>
+        // -- tapi "Setting DNS servers for network 105 to []" tetap terjadi. Jadi
+        // perbaikan rute TARGET_NEEDS_NETD_DIRECT_CONNECT_RULE yang dipakai di 22.2
+        // TIDAK diperlukan di sini; yang tersisa murni penolakan IFA_FLAGS ini.
+        //
+        // Pesan yang ditolak di perangkat ini didekode utuh dan sah: RTM_NEWADDR,
+        // 80 byte, AF_INET, prefixlen 24, ifindex 37 (wlan0), 192.168.0.188, dengan
+        // IFA_ADDRESS/IFA_LOCAL/IFA_BROADCAST/IFA_LABEL/IFA_CACHEINFO lengkap dan
+        // IFA_FLAGS memang tidak ada.
+        //
+        // Kalau atributnya tidak ada, flag 8-bit dari ifaddrmsg yang sudah dibaca di atas tetap
+        // dipakai -- itu memang satu-satunya sumber flag sebelum IFA_FLAGS diperkenalkan.
         byteBuffer.position(baseOffset);
         nlAttr = StructNlAttr.findNextAttrOfType(IFA_FLAGS, byteBuffer);
-        if (nlAttr == null) return null;
-        final Integer value = nlAttr.getValueAsInteger();
-        if (value == null) return null;
-        addrMsg.mFlags = value;
+        if (nlAttr != null) {
+            final Integer value = nlAttr.getValueAsInteger();
+            if (value != null) addrMsg.mFlags = value;
+        }
 
         return addrMsg;
     }
